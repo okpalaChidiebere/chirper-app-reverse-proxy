@@ -1,0 +1,121 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ng-chirper-app-ingress-http
+  namespace: default
+  annotations:
+    cert-manager.io/issuer: letsencrypt-prod-issuer
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      # handle CORS preflight requests
+      if ($request_method = 'OPTIONS' ) {
+        add_header Access-Control-Allow-Origin "$http_origin" always; # we allowed all frontend web applications. Optionally we can only allow just our font-end app `laundrykya.com` if we want a more secure api at application level
+        add_header 'Access-Control-Allow-Headers' 'Origin, X-Requested-With, Content-Type, Accept, Access-Control-Allow-Origin';
+        add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS, PATCH';
+        add_header 'Content-Length' 0;
+        return 204 no-content;
+      }
+    #After you might want to use nginx.ingress.kubernetes.io/sever-snippet sometimes.  See https://stackoverflow.com/questions/63289848/kubernetes-nginx-ingress-error-with-configuration-snippet
+    # https://docs.nginx.com/nginx-ingress-controller/configuration/ingress-resources/advanced-configuration-with-snippets/
+spec:
+  ingressClassName: nginx # this class ...
+  tls:
+    - hosts:
+        - "laundrykya.com" # this will be the default Common name (CN) of the certificate. I can be confusing especially that this cert support multiple hosts
+        - "apigateway-1.laundrykya.com"
+        - "apigateway-2.laundrykya.com"
+      secretName: test-dev-tls # cert-manager generates certificate and populates the k8s secret containing the certificate with name `test-dev-tls`
+  rules:
+    - host: laundrykya.com
+      http:
+        paths:
+          - pathType: Prefix
+            path: /
+            backend:
+              service:
+                name: udagram-frontend
+                port:
+                  number: 80
+    - host: apigateway-1.laundrykya.com
+      http:
+        paths:
+          - pathType: Prefix
+            path: /(api/v0/tweets)
+            backend:
+              service:
+                name: chirper-app-tweet-service
+                port:
+                  number: 6060
+    - host: apigateway-2.laundrykya.com
+      http:
+        paths:
+          - path: /(user.v1..*)
+            pathType: Prefix
+            backend:
+              service:
+                name: chirper-app-user-service
+                port:
+                  number: 8000
+          - path: /(image_filter.v1..*)
+            pathType: Prefix
+            backend:
+              service:
+                name: chirper-app-image-filter-service
+                port:
+                  number: 9000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true" # must use SSL
+    nginx.ingress.kubernetes.io/backend-protocol: "GRPC" # see doc https://kubernetes.github.io/ingress-nginx/examples/grpc/
+    nginx.ingress.kubernetes.io/server-alias: "ng-chirper-app-ingress-grpc"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+  name: ng-chirper-app-ingress-grpc
+  namespace: default
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: grpc-gateway.laundrykya.com
+      http:
+        paths:
+          - path: /(tweet.v1..*)
+            pathType: Prefix
+            backend:
+              service:
+                name: chirper-app-tweet-service
+                port:
+                  number: 6061
+          - path: /(user.v1..*)
+            pathType: Prefix
+            backend:
+              service:
+                name: chirper-app-user-service
+                port:
+                  number: 8000
+          - path: /(image_filter.v1..*)
+            pathType: Prefix
+            backend:
+              service:
+                name: chirper-app-image-filter-service
+                port:
+                  number: 9000
+          # - path: /grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo
+          #   pathType: Prefix
+          #   backend:
+          #     service:
+          #       name: chirper-app-tweet-service
+          #       port:
+          #         number: 6061
+  tls:
+    # This secret must exist beforehand
+    # The cert must also contain the subj-name grpc-gateway.laundrykya.com
+    # https://github.com/kubernetes/ingress-nginx/blob/master/docs/examples/PREREQUISITES.md#tls-certificates
+    - secretName: test-dev-tls
+      hosts:
+        - "grpc-gateway.laundrykya.com"
+# grpcurl grpc-gateway.laundrykya.com:443 tweet.v1.TweetService/ListTweets

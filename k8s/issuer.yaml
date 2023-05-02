@@ -1,0 +1,35 @@
+apiVersion: cert-manager.io/v1
+# Kind `ClusterIssuer` means that it will work for all the namespace eg: prod, staging in this cluster.
+# If we set the Kind to `Issuer`, it will work for just one namespace
+# I used Issuer because its more ideal and I can create an issuer for different namespaces
+kind: Issuer
+metadata:
+  name: letsencrypt-prod-issuer
+  namespace: default
+spec:
+  acme:
+    email: admin@chiperapp.com
+    server: https://acme-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      # Secret resource that will be used to store the account's private key.
+      name: letsencrypt-prod-issuer-secret
+    solvers:
+      - http01:
+          ingress:
+            class: nginx
+---
+# Let’s Encrypt Cert Issuer for Staging Server
+# apiVersion: cert-manager.io/v1
+# kind: Issuer
+# metadata:
+#   name: letsencrypt-staging-issuer
+#   namespace: staging
+# spec:
+#   acme:
+#     email: admin@chiperapp.com
+#     server: https://acme-staging-v02.api.letsencrypt.org/directory
+#     privateKeySecretRef:
+#       name: letsencrypt-staging-issuer-secret
+#     solvers:
+#       - dns01:
+#           ...
